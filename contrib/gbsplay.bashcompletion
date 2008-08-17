@@ -37,20 +37,32 @@ _gbsplay()
 	done
 	if [ $(( $COMP_CWORD - $filepos )) -eq 0 ] ; then
 	    # ==> this is the filename
+	    # save dotglob setting
+	    local shoptsave
+	    if shopt -q dotglob; then
+		shoptsave=1
+	    fi
+	    # expand and parse file list
 	    COMPREPLY=()
-	    local i
-	    # add trailing space to filenames
-	    local files
-	    files=( $( compgen -f -X '!*.gbs' -- $cur ) ) # does not work: | sed -e 's/\([[:space:]]\)/\\\1/g'
-	    for (( i=0; i < ${#files[@]}; i++ )); do
-		COMPREPLY[${#COMPREPLY[@]}]="${files[$i]} "
+	    local file
+	    for file in "$cur"* ; do
+		[ "$file" = "${cur}*" -a ! -e "$cur*" ] && continue  # no matches at all
+		[ "$file" = "." -o "$file" = ".." ] && continue
+		file="$(echo "$file" | sed -e 's/\([[:space:]]\)/\\\1/g')"
+		if [ -d "$file" ]; then
+		    COMPREPLY[${#COMPREPLY[@]}]="${file}/"
+		elif [[ "$file" =~ '\.gbs$' ]] ; then
+		    COMPREPLY[${#COMPREPLY[@]}]="${file} "
+		fi
 	    done
-	    # add trailing slash to directories
-	    local dirs
-	    dirs=( $( compgen -d -- $cur ) )
-	    for (( i=0; i < ${#dirs[@]}; i++ )); do
-		COMPREPLY[${#COMPREPLY[@]}]="${dirs[$i]}/"
-	    done
+	    # don't give empty results
+	    if [ ${#COMPREPLY[@]} -eq 0 ]; then
+		COMPREPLY[0]="$cur"
+	    fi
+	    # restore dotglob setting
+	    if [ "${shoptsave}" != "1" ]; then
+		shopt -u dotglob
+	    fi
 	elif [ $(( $COMP_CWORD - $filepos )) -eq 1 ] ; then
 	    # ==> this is the subsong start
 	    COMPREPLY=( $( compgen -W "$(seq $(gbsinfo ${COMP_WORDS[filepos]} 2>/dev/null | grep ^Subsongs | cut -d: -f 2) 2>/dev/null)" -- $cur ) )
