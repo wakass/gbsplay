@@ -37,32 +37,46 @@ _gbsplay()
 	done
 	if [ $(( $COMP_CWORD - $filepos )) -eq 0 ] ; then
 	    # ==> this is the filename
-	    # save dotglob setting
-	    local shoptsave
+
+	    # save settings setting
+	    local pwdsave="$PWD"
+	    local shoptsave=-u
 	    if shopt -q dotglob; then
-		shoptsave=1
+		shoptsave=-q
 	    fi
+
+	    
 	    # expand and parse file list
+	    local curname file
+	    local path="$cur%/*"
+	    if [ x"$path" = x"$cur" ]; then
+		path=""
+	    else
+		[ -d "$path" -a -r "$path" -a -x "$path" ] || return 1
+		cur_name="${cur#"${path}/"}"
+		cd "$path"
+	    fi
 	    COMPREPLY=()
-	    local file
-	    for file in "$cur"* ; do
-		[ "$file" = "${cur}*" -a ! -e "$cur*" ] && continue  # no matches at all
-		[ "$file" = "." -o "$file" = ".." ] && continue
-		file="$(echo "$file" | sed -e 's/\([[:space:]]\)/\\\1/g')"
-		if [ -d "$file" ]; then
-		    COMPREPLY[${#COMPREPLY[@]}]="${file}/"
-		elif [[ "$file" =~ '\.gbs$' ]] ; then
-		    COMPREPLY[${#COMPREPLY[@]}]="${file} "
-		fi
+	    for file in *; do
+	      [ . = "$file" -o .. = "$file" ] && continue
+	      if [ x"$cur_name" = x"${file#"$cur_name"}" ]; then
+		  if [ -d "$file" ]; then
+		      COMPREPLY[${#COMPREPLY[@]}]="${file}/"
+		  elif [[ "$file" =~ '\.gbs$' ]]; then		      
+		      COMPREPLY[${#COMPREPLY[@]}]="${file} "
+		  fi
+	      fi
 	    done
+
 	    # don't give empty results
 	    if [ ${#COMPREPLY[@]} -eq 0 ]; then
 		COMPREPLY[0]="$cur"
 	    fi
 	    # restore dotglob setting
-	    if [ "${shoptsave}" != "1" ]; then
-		shopt -u dotglob
-	    fi
+	    shopt $shoptsave dotglob
+	    cd "$pwdsave"
+
+
 	elif [ $(( $COMP_CWORD - $filepos )) -eq 1 ] ; then
 	    # ==> this is the subsong start
 	    COMPREPLY=( $( compgen -W "$(seq $(gbsinfo ${COMP_WORDS[filepos]} 2>/dev/null | grep ^Subsongs | cut -d: -f 2) 2>/dev/null)" -- $cur ) )
