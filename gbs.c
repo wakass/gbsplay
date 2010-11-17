@@ -24,19 +24,22 @@
 #define GBS_MAGIC		"GBS"
 #define GBS_EXTHDR_MAGIC	"GBSX"
 
+/* called with subsong in a, load address in hl */
 static const uint8_t playercode[] = {
+/* Part 1, hardware init */
 	0xf5,              /* 0050:  push af         */
 	0xe5,              /* 0051:  push hl         */
 	0x01, 0x30, 0x00,  /* 0052:  ld   bc, 0x0030 */
 	0x11, 0x10, 0xff,  /* 0055:  ld   de, 0xff10 */
 	0x21, 0x9f, 0x00,  /* 0058:  ld   hl, 0x009f */
+	                   /*   l1:                  */
 	0x2a,              /* 005b:  ldi  a, [hl]    */
 	0x12,              /* 005c:  ld   [de], a    */
 	0x13,              /* 005d:  inc  de         */
 	0x0b,              /* 005e:  dec  bc         */
 	0x78,              /* 005f:  ld   a, b       */
 	0xb1,              /* 0060:  or   a, c       */
-	0x20, 0xf8,        /* 0061:  jr nz $-0x08    */
+	0x20, 0xf8,        /* 0061:  jr nz l1 ; ($-8)*/
 	0xe1,              /* 0063:  pop  hl         */
 	0xe5,              /* 0064:  push hl         */
 	0x01, 0x0e, 0x00,  /* 0065:  ld   bc, 0x000e */
@@ -48,11 +51,13 @@ static const uint8_t playercode[] = {
 	0x11, 0xff, 0xff,  /* 006f:  ld   de, 0xffff */
 	0xcb, 0x57,        /* 0072:  bit  2, a       */
 	0x3e, 0x01,        /* 0074:  ld   a, 0x01    */
-	0x28, 0x02,        /* 0076:  jr z $+2        */
+	0x28, 0x02,        /* 0076:  jr z l2 ; ($+2) */
 	0x3e, 0x04,        /* 0078:  ld   a, 0x04    */
+	                   /*   l2:                  */
 	0x12,              /* 007a:  ld   [de], a    */
 	0xe1,              /* 007b:  pop  hl         */
 	0xf1,              /* 007c:  pop  af         */
+/* Part 2, wrapper for replayer code */
 	0x57,              /* 007d:  ld   d, a       */
 	0xe5,              /* 007e:  push hl         */
 	0x01, 0x08, 0x00,  /* 007f:  ld   bc, 0x0008 */
@@ -64,6 +69,7 @@ static const uint8_t playercode[] = {
 	0x01, 0x8c, 0x00,  /* 0087:  ld   bc, 0x008c */
 	0xc5,              /* 008a:  push bc         */
 	0xe9,              /* 008b:  jp   hl         */
+	                   /*   l3:                  */
 	0xfb,              /* 008c:  ei              */
 	0x76,              /* 008d:  halt            */
 	0xe1,              /* 008e:  pop  hl         */
@@ -77,15 +83,22 @@ static const uint8_t playercode[] = {
 	0x01, 0x9d, 0x00,  /* 0098:  ld   bc, 0x009d */
 	0xc5,              /* 009b:  push bc         */
 	0xe9,              /* 009c:  jp   hl         */
-	0x18, 0xee,        /* 009d:  jr $-6          */
+	0x18, 0xed,        /* 009d:  jr l3 ; ($-19)  */
 
-	0x80, 0xbf, 0x00, 0x00, 0xbf, /* 009f: initdata */
+/* 009f: initdata
+ *
+ * Initial state of sound hardware registers
+ * and wave pattern memory
+ */
+/* sound registers */
+	0x80, 0xbf, 0x00, 0x00, 0xbf,
 	0x00, 0x3f, 0x00, 0x00, 0xbf,
 	0x7f, 0xff, 0x9f, 0x00, 0xbf,
 	0x00, 0xff, 0x00, 0x00, 0xbf,
 	0x77, 0xf3, 0xf1, 0x00,
 	0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00,
+/* wave pattern memory, taken from gbsound.txt v0.99.19 (12/31/2002) */
 	0xac, 0xdd, 0xda, 0x48,
 	0x36, 0x02, 0xcf, 0x16,
 	0x2c, 0x04, 0xe5, 0x2c,
@@ -372,8 +385,8 @@ regparm struct gbs *gbs_open(char *name)
 	gbs->init  = readint(&buf[0x08], 2);
 	gbs->play  = readint(&buf[0x0a], 2);
 	gbs->stack = readint(&buf[0x0c], 2);
-	gbs->tma = buf[0x0e];
-	gbs->tmc = buf[0x0f];
+	gbs->tma = buf[0x0e]; /* Will be programmed by playercode */
+	gbs->tmc = buf[0x0f]; /* Will be programmed by playercode */
 
 	memcpy(gbs->v1strings, &buf[0x10], 32);
 	memcpy(gbs->v1strings+33, &buf[0x30], 32);

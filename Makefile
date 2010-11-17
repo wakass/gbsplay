@@ -65,7 +65,7 @@ DISTDIR := gbsplay-$(VERSION)
 GBSCFLAGS  += $(EXTRA_CFLAGS)
 GBSLDFLAGS += $(EXTRA_LDFLAGS)
 
-export CC GBSCFLAGS GBSLDFLAGS
+export CC HOSTCC BUILDCC GBSCFLAGS GBSLDFLAGS
 
 docs           := README HISTORY COPYRIGHT
 contribs       := contrib/gbs2ogg.sh contrib/gbsplay.bashcompletion
@@ -164,7 +164,7 @@ uninstall-libgbs.so.1:
 
 
 libgbs.so.1: $(objs_libgbspic) libgbs.so.1.ver
-	$(CC) -fpic -shared -Wl,-O1 -Wl,-soname=$@ -Wl,--version-script,$@.ver -o $@ $(objs_libgbspic)
+	$(BUILDCC) -fpic -shared -Wl,-O1 -Wl,-soname=$@ -Wl,--version-script,$@.ver -o $@ $(objs_libgbspic)
 	ln -fs $@ libgbs.so
 
 libgbs: libgbs.so.1
@@ -301,7 +301,7 @@ TESTOPTS := -r 44100 -t 30 -f 0 -g 0 -T 0
 
 test: gbsplay
 	@MD5=`LD_LIBRARY_PATH=.:$$LD_LIBRARY_PATH ./gbsplay -E b -o stdout $(TESTOPTS) examples/nightmode.gbs 1 < /dev/null | md5sum | cut -f1 -d\ `; \
-	EXPECT="577ade576a9b99de27edff4236c8e303"; \
+	EXPECT="5269fdada196a6b67d947428ea3ca934"; \
 	if [ "$$MD5" = "$$EXPECT" ]; then \
 		echo "Bigendian output ok"; \
 	else \
@@ -311,7 +311,7 @@ test: gbsplay
 		exit 1; \
 	fi
 	@MD5=`LD_LIBRARY_PATH=.:$$LD_LIBRARY_PATH ./gbsplay -E l -o stdout $(TESTOPTS) examples/nightmode.gbs 1 < /dev/null | md5sum | cut -f1 -d\ `; \
-	EXPECT="4423ba04ce18f5328986b5595991129c"; \
+	EXPECT="3c005a70135621d8eb3e0dc20982eba8"; \
 	if [ "$$MD5" = "$$EXPECT" ]; then \
 		echo "Littleendian output ok"; \
 	else \
@@ -326,12 +326,12 @@ libgbspic.a: $(objs_libgbspic)
 libgbs.a: $(objs_libgbs)
 	$(AR) r $@ $+
 gbsinfo: $(objs_gbsinfo) libgbs
-	$(CC) -o $(gbsinfobin) $(objs_gbsinfo) $(GBSLDFLAGS)
+	$(BUILDCC) -o $(gbsinfobin) $(objs_gbsinfo) $(GBSLDFLAGS)
 gbsplay: $(objs_gbsplay) libgbs
-	$(CC) -o $(gbsplaybin) $(objs_gbsplay) $(GBSLDFLAGS) $(GBSPLAYLDFLAGS) -lm
+	$(BUILDCC) -o $(gbsplaybin) $(objs_gbsplay) $(GBSLDFLAGS) $(GBSPLAYLDFLAGS) -lm
 
 gbsxmms.so: $(objs_gbsxmms) libgbspic gbsxmms.so.ver
-	$(CC) -shared -fpic -Wl,--version-script,$@.ver -o $@ $(objs_gbsxmms) $(GBSLDFLAGS) $(PTHREAD)
+	$(BUILDCC) -shared -fpic -Wl,--version-script,$@.ver -o $@ $(objs_gbsxmms) $(GBSLDFLAGS) $(PTHREAD)
 
 # rules for suffixes
 
@@ -339,15 +339,15 @@ gbsxmms.so: $(objs_gbsxmms) libgbspic gbsxmms.so.ver
 
 .c.lo:
 	@echo CC $< -o $@
-	@$(CC) $(GBSCFLAGS) -fpic -c -o $@ $<
+	@$(BUILDCC) $(GBSCFLAGS) -fpic -c -o $@ $<
 .c.o:
 	@echo CC $< -o $@
 	@(test -x "`which $(SPLINT)`" && $(SPLINT) $(SPLINTFLAGS) $<) || true
-	@$(CC) $(GBSCFLAGS) -c -o $@ $<
+	@$(BUILDCC) $(GBSCFLAGS) -c -o $@ $<
 .c.i:
-	$(CC) -E $(GBSCFLAGS) -o $@ $<
+	$(BUILDCC) -E $(GBSCFLAGS) -o $@ $<
 .c.s:
-	$(CC) -S $(GBSCFLAGS) -fverbose-asm -o $@ $<
+	$(BUILDCC) -S $(GBSCFLAGS) -fverbose-asm -o $@ $<
 
 # rules for generated files
 

@@ -67,20 +67,24 @@ static int midi_write_u16(uint16_t x)
 
 static int midi_write_varlen(unsigned long x)
 {
-	do {
-		uint8_t s;
+	uint8_t data[4];
+	unsigned int i;
 
-		s = x & 0x7f;
+	for (i = 0; i < 4; ++i) {
+		data[3 - i] = (x & 0x7f) | 0x80;
 		x >>= 7;
-		if (x)
-			s |= 0x80;
 
-		if (fwrite(&s, 1, 1, file) != 1)
-			return 1;
+		if (!x) {
+			++i;
+			break;
+		}
+	}
 
-		++track_length;
-	} while(x);
+	data[3] &= ~0x80;
+	if (fwrite(data + 4 - i, 1, i, file) != i)
+		return 1;
 
+	track_length += i;
 	return 0;
 }
 
@@ -201,8 +205,7 @@ static int note_on(long cycles, int channel, int note, int velocity)
 {
 	uint8_t event[3];
 
-	//event[0] = 0x90 | channel;
-	event[0] = 0x90;
+	event[0] = 0x90 | channel;
 	event[1] = note;
 	event[2] = velocity;
 
@@ -216,8 +219,7 @@ static int note_off(long cycles, int channel, int note)
 {
 	uint8_t event[3];
 
-	//event[0] = 0x80 | channel;
-	event[0] = 0x80;
+	event[0] = 0x80 | channel;
 	event[1] = note;
 	event[2] = 0;
 
@@ -232,6 +234,7 @@ static int regparm midi_io(long cycles, uint32_t addr, uint8_t val)
 	static long div[4] = {0, 0, 0, 0};
 	static long note[4] = {0, 0, 0, 0};
 	static int volume[4] = {0, 0, 0, 0};
+	int new_note;
 
 	long chan = (addr - 0xff10) / 5;
 
@@ -253,7 +256,7 @@ static int regparm midi_io(long cycles, uint32_t addr, uint8_t val)
 		div[chan] &= 0x00ff;
 		div[chan] |= ((long) (val & 7)) << 8;
 
-		int new_note = NOTE(2048 - div[chan]) + 21;
+		new_note = NOTE(2048 - div[chan]) + 21;
 
 		/* Channel start trigger */
 		if (val & 0x80) {
