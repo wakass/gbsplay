@@ -75,7 +75,7 @@ static long redraw = false;
 
 static const char cfgfile[] = ".gbsplayrc";
 
-static char *sound_name = "oss";
+static char *sound_name = PLUGOUT_DEFAULT;
 static char *sound_description;
 static plugout_open_fn  sound_open;
 static plugout_skip_fn  sound_skip;
@@ -92,16 +92,16 @@ static struct gbhw_buffer buf = {
 
 /* configuration directives */
 static const struct cfg_option options[] = {
+	{ "endian", &endian, cfg_endian },
+	{ "fadeout", &fadeout, cfg_long },
+	{ "loop", &loopmode, cfg_long },
+	{ "output_plugin", &sound_name, cfg_string },
 	{ "rate", &rate, cfg_long },
 	{ "refresh_delay", &refresh_delay, cfg_long },
-	{ "verbosity", &verbosity, cfg_long },
-	{ "endian", &endian, cfg_endian },
-	{ "subsong_timeout", &subsong_timeout, cfg_long },
-	{ "subsong_gap", &subsong_gap, cfg_long },
-	{ "fadeout", &fadeout, cfg_long },
 	{ "silence_timeout", &silence_timeout, cfg_long },
-	{ "output_plugin", &sound_name, cfg_string },
-	{ "loop", &loopmode, cfg_long },
+	{ "subsong_gap", &subsong_gap, cfg_long },
+	{ "subsong_timeout", &subsong_timeout, cfg_long },
+	{ "verbosity", &verbosity, cfg_long },
 	/* playmode not implemented yet */
 	{ NULL, NULL, NULL }
 };
@@ -382,7 +382,7 @@ static regparm void parseopts(int *argc, char ***argv)
 {
 	long res;
 	myname = *argv[0];
-	while ((res = getopt(*argc, *argv, "1234E:f:g:hlo:qr:R:t:T:vVzZ")) != -1) {
+	while ((res = getopt(*argc, *argv, "1234c:E:f:g:hlo:qr:R:t:T:vVzZ")) != -1) {
 		switch (res) {
 		default:
 			usage(1);
@@ -392,6 +392,9 @@ static regparm void parseopts(int *argc, char ***argv)
 		case '3':
 		case '4':
 			gbhw_ch[res-'1'].mute ^= 1;
+			break;
+		case 'c':
+			cfg_parse(optarg, options);
 			break;
 		case 'E':
 			if (strcasecmp(optarg, "b") == 0) {
