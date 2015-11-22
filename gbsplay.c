@@ -79,6 +79,7 @@ static char *sound_name = PLUGOUT_DEFAULT;
 static char *sound_description;
 static plugout_open_fn  sound_open;
 static plugout_skip_fn  sound_skip;
+static plugout_pause_fn sound_pause;
 static plugout_io_fn    sound_io;
 static plugout_write_fn sound_write;
 static plugout_close_fn sound_close;
@@ -185,8 +186,7 @@ static regparm void swap_endian(struct gbhw_buffer *buf)
 
 static regparm void iocallback(long cycles, uint32_t addr, uint8_t val, void *priv)
 {
-	if (sound_io)
-		sound_io(cycles, addr, val);
+	sound_io(cycles, addr, val);
 }
 
 static regparm void callback(struct gbhw_buffer *buf, void *priv)
@@ -340,7 +340,7 @@ static regparm void usage(long exitcode)
 {
 	FILE *out = exitcode ? stderr : stdout;
 	fprintf(out,
-	        _("Usage: %s [option(s)] <gbs-file> [start_at_subsong [stop_at_subsong] ]\n"
+		_("Usage: %s [option(s)] <gbs-file> [start_at_subsong [stop_at_subsong] ]\n"
 		  "\n"
 		  "Available options are:\n"
 		  "  -E        endian, b == big, l == little, n == native (%s)\n"
@@ -360,15 +360,15 @@ static regparm void usage(long exitcode)
 		  "  -z        play subsongs in shuffle mode\n"
 		  "  -Z        play subsongs in random mode (repetitions possible)\n"
 		  "  -1 to -4  mute a channel on startup\n"),
-	        myname,
-	        endian_str(endian),
+		myname,
+		endian_str(endian),
 		fadeout,
 		subsong_gap,
 		sound_name,
-	        rate,
+		rate,
 		refresh_delay,
 		subsong_timeout,
-	        silence_timeout);
+		silence_timeout);
 	exit(exitcode);
 }
 
@@ -485,6 +485,7 @@ static regparm void handleuserinput(struct gbs *gbs)
 		case ' ':
 			pause_mode = !pause_mode;
 			gbhw_pause(pause_mode);
+			if (sound_pause) sound_pause(pause_mode);
 			break;
 		case '1':
 		case '2':
@@ -532,6 +533,27 @@ static regparm char *volstring(long v)
 	return &vollookup[5*v];
 }
 
+static regparm void printregs(void)
+{
+	long i;
+	for (i=0; i<5*4; i++) {
+		if (i % 5 == 0)
+			printf("CH%ld:", i/5 + 1);
+		printf(" %02x", gbhw_io_peek(0xff10+i));
+		if (i % 5 == 4)
+			printf("\n");
+	}
+	printf("MISC:");
+	for (i+=0x10; i<0x27; i++) {
+		printf(" %02x", gbhw_io_peek(0xff00+i));
+	}
+	printf("\nWAVE: ");
+	for (i=0; i<16; i++) {
+		printf("%02x", gbhw_io_peek(0xff30+i));
+	}
+	printf("\n\033[A\033[A\033[A\033[A\033[A\033[A");
+}
+
 static regparm void printstatus(struct gbs *gbs)
 {
 	long time = gbs->ticks / GBHW_CLOCK;
@@ -552,7 +574,7 @@ static regparm void printstatus(struct gbs *gbs)
 		songtitle=_("Untitled");
 	}
 	printf("\r\033[A\033[A"
-	       "Song %3ld/%3ld (%s)\033[K\n"
+	       "Song %3d/%3d (%s)\033[K\n"
 	       "%02ld:%02ld/%02ld:%02ld",
 	       gbs->subsong+1, gbs->songs, songtitle,
 	       timem, times, lenm, lens);
@@ -566,6 +588,9 @@ static regparm void printstatus(struct gbs *gbs)
 		       volstring(gbs->rvol/1024));
 	} else {
 		puts("");
+	}
+	if (verbosity>3) {
+		printregs();
 	}
 	fflush(stdout);
 }
@@ -633,6 +658,7 @@ static regparm void select_plugin(void)
 	sound_io = plugout->io;
 	sound_write = plugout->write;
 	sound_close = plugout->close;
+	sound_pause = plugout->pause;
 	sound_description = plugout->description;
 
 	if (plugout->flags & PLUGOUT_USES_STDOUT) {
@@ -673,8 +699,10 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	gbhw_setiocallback(iocallback, NULL);
-	gbhw_setcallback(callback, NULL);
+	if (sound_io)
+		gbhw_setiocallback(iocallback, NULL);
+	if (sound_write)
+		gbhw_setcallback(callback, NULL);
 	gbhw_setrate(rate);
 
 	if (argc >= 2) {

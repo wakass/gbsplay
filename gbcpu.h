@@ -19,7 +19,7 @@
 #define BC	0
 #define DE	1
 #define HL	2
-#define FA	3
+#define AF	3
 #define SP	4
 #define PC	5
 
@@ -50,13 +50,14 @@ static inline void foo(void)
 
 #if BYTE_ORDER == LITTLE_ENDIAN
 
-#define REGS16_R(r, i) (*((uint16_t*)&r.ri[i*2]))
-#define REGS16_W(r, i, x) (*((uint16_t*)&r.ri[i*2])) = x
+#define REGS16_R(r, i) (r.rw[i])
+#define REGS16_W(r, i, x) (r.rw[i]) = x
 #define REGS8_R(r, i) (r.ri[i^1])
 #define REGS8_W(r, i, x) (r.ri[i^1]) = x
 
 typedef union {
 		uint8_t ri[12];
+		uint16_t rw[6];
 		struct {
 			uint8_t c;
 			uint8_t b;
@@ -73,13 +74,14 @@ typedef union {
 
 #else
 
-#define REGS16_R(r, i) (*((uint16_t*)&r.ri[i*2]))
-#define REGS16_W(r, i, x) (*((uint16_t*)&r.ri[i*2])) = x
+#define REGS16_R(r, i) (r.rw[i])
+#define REGS16_W(r, i, x) (r.rw[i]) = x
 #define REGS8_R(r, i) (r.ri[i])
 #define REGS8_W(r, i, x) (r.ri[i]) = x
 
 typedef union {
 		uint8_t ri[12];
+		uint16_t rw[6];
 		struct {
 			uint8_t b;
 			uint8_t c;
@@ -100,6 +102,7 @@ typedef regparm void (*gbcpu_put_fn)(uint32_t addr, uint8_t val);
 typedef regparm uint32_t (*gbcpu_get_fn)(uint32_t addr);
 
 extern gbcpu_regs_u gbcpu_regs;
+extern long gbcpu_halt_at_pc;
 extern long gbcpu_halted;
 extern long gbcpu_if;
 
@@ -107,5 +110,6 @@ regparm void gbcpu_addmem(uint32_t start, uint32_t end, gbcpu_put_fn putfn, gbcp
 regparm void gbcpu_init(void);
 regparm long gbcpu_step(void);
 regparm void gbcpu_intr(long vec);
+regparm void gbcpu_mem_put(uint16_t addr, uint8_t val);
 
 #endif

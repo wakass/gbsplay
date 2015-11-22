@@ -1,16 +1,17 @@
 # German translations for gbsplay.
-# Copyright (C) 2003-2006,2008 Tobias Diedrich <ranma+gbsplay@tdiedrich.de>
-# 			     Christian Garbs <mitch@cgarbs.de>
+# Copyright (C) 2003-2006,2008,2015  Tobias Diedrich <ranma+gbsplay@tdiedrich.de>
+# 			             Christian Garbs <mitch@cgarbs.de>
 # This file is distributed under GNU GPL.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: 0.0.4\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2008-06-20 22:20+0200\n"
-"PO-Revision-Date: 2008-06-20 22:31+0200\n"
+"POT-Creation-Date: 2015-10-27 23:04+0100\n"
+"PO-Revision-Date: 2015-07-18 22:22+0200\n"
 "Last-Translator: Christian Garbs <mitch@cgarbs.de>\n"
 "Language-Team: none\n"
+"Language: de\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=ISO-8859-1\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -20,7 +21,9 @@ msgstr ""
 msgid ""
 "\n"
 "Caught signal %d, exiting...\n"
-msgstr "\nSignal %d abgefangen, beende Ausführung...\n"
+msgstr ""
+"\n"
+"Signal %d abgefangen, beende Ausführung...\n"
 
 msgid ""
 "\n"
@@ -30,6 +33,9 @@ msgstr ""
 "\n"
 "Befehle:  [p] vorheriger Subsong   [n]ächster Subsong   [q] Player beenden\n"
 "          [ ] Pause/Weiterspielen   [1-4] Kanal stummschalten"
+
+msgid " + VBlank (ugetab)"
+msgstr " + VBlank (ugetab)"
 
 #, c-format
 msgid ""
@@ -75,10 +81,12 @@ msgstr "'%s' erwartet in %s Zeile %ld Spalte %ld.\n"
 msgid "(%ld seconds)\n"
 msgstr "(%ld Sekunden)\n"
 
+msgid "59.7Hz VBlank\n"
+msgstr "59.7Hz VBlank\n"
+
 msgid "Artist:"
 msgstr "Künstler:"
 
-#, c-format
 msgid ""
 "Available output plugins:\n"
 "\n"
@@ -87,8 +95,16 @@ msgstr ""
 "\n"
 
 #, c-format
-msgid "CRC32:\t\t0x%08lx/0x%08lx (%s)\n"
-msgstr "CRC32:\t\t0x%08lx/0x%08lx (%s)\n"
+msgid "Bank @0x4000:     %d\n"
+msgstr "Bank @0x4000:     %d\n"
+
+#, c-format
+msgid "CRC32:            0x%08lx\n"
+msgstr "CRC32:            0x%08lx\n"
+
+#, c-format
+msgid "CRC32:            0x%08lx/0x%08lx (%s)\n"
+msgstr "CRC32:            0x%08lx/0x%08lx (%s)\n"
 
 msgid "Cancel"
 msgstr "Abbrechen"
@@ -111,6 +127,18 @@ msgstr "Konnte ALSA-PCM-Gerät '%s' nicht öffnen: %s\n"
 #, c-format
 msgid "Could not open output plugin \"%s\"\n"
 msgstr "Konnte Ausgabemethode \"%s\" nicht öffnen\n"
+
+#, c-format
+msgid "Could not read %s: %s\n"
+msgstr "Konnte %s nicht lesen: %s\n"
+
+#, c-format
+msgid "Could not rename %s to %s: %s\n"
+msgstr "Konnte %s nicht in %s umbenennen: %s\n"
+
+#, c-format
+msgid "Default subsong %d is out of range [1..%d].\n"
+msgstr "Standard-Subsong %d liegt außerhalb des Wertebereiches [1..%d].\n"
 
 msgid "Error opening output plugin."
 msgstr "Konnte Ausgabemethode nicht öffnen."
@@ -139,29 +167,31 @@ msgstr "GBS Version %d wird nicht unterstützt.\n"
 
 #, c-format
 msgid ""
-"GBSVersion:     %ld\n"
-"Title:          \"%s\"\n"
-"Author:         \"%s\"\n"
-"Copyright:      \"%s\"\n"
-"Load address:   0x%04x\n"
-"Init address:   0x%04x\n"
-"Play address:   0x%04x\n"
-"Stack pointer:  0x%04x\n"
-"File size:      0x%08x\n"
-"ROM size:       0x%08lx (%ld banks)\n"
-"Subsongs:       %ld\n"
+"GBSVersion:       %u\n"
+"Title:            \"%s\"\n"
+"Author:           \"%s\"\n"
+"Copyright:        \"%s\"\n"
+"Load address:     0x%04x\n"
+"Init address:     0x%04x\n"
+"Play address:     0x%04x\n"
+"Stack pointer:    0x%04x\n"
+"File size:        0x%08x\n"
+"ROM size:         0x%08lx (%ld banks)\n"
+"Subsongs:         %u\n"
+"Default subsong:  %u\n"
 msgstr ""
-"GBSVersion:     %ld\n"
-"Titel:          \"%s\"\n"
-"Autor:          \"%s\"\n"
-"Copyright:      \"%s\"\n"
-"Ladeadresse:    0x%04x\n"
-"Initadresse:    0x%04x\n"
-"Abspieladresse: 0x%04x\n"
-"Stack-Zeiger:   0x%04x\n"
-"Dateigrösse:    0x%08x\n"
-"ROM-Grösse:     0x%08lx (%ld Bänke)\n"
-"Subsongs:       %ld\n"
+"GBSVersion:       %u\n"
+"Titel:            \"%s\"\n"
+"Autor:            \"%s\"\n"
+"Copyright:        \"%s\"\n"
+"Ladeadresse:      0x%04x\n"
+"Initadresse:      0x%04x\n"
+"Abspieladresse:   0x%04x\n"
+"Stack-Zeiger:     0x%04x\n"
+"Dateigröße:       0x%08x\n"
+"ROM-Größe:        0x%08lx (%ld banks)\n"
+"Subsongs:         %u\n"
+"Standard-Subsong: %u\n"
 
 msgid "Game:"
 msgstr "Spiel:"
@@ -178,7 +208,6 @@ msgstr "Speicherreservierung fehlgeschlagen!\n"
 msgid "Next"
 msgstr "Nächster"
 
-#, c-format
 msgid ""
 "No output plugins available.\n"
 "\n"
@@ -187,8 +216,16 @@ msgstr ""
 "\n"
 
 #, c-format
+msgid "Not a GBR-File: %s\n"
+msgstr "Not a GBR-File: %s\n"
+
+#, c-format
 msgid "Not a GBS-File: %s\n"
 msgstr "Keine GBS-Datei: %s\n"
+
+#, c-format
+msgid "Number of subsongs = %d is unreasonable.\n"
+msgstr "Anzahl der Subsongs = %d ist unsinnig.\n"
 
 msgid "OK"
 msgstr "Korrekt"
@@ -211,8 +248,16 @@ msgid "Subsong %03ld:\t"
 msgstr "Subsong %03ld:\t"
 
 #, c-format
-msgid "Subsong number out of range (min=0, max=%ld).\n"
-msgstr "Subsong-Nummer außerhalb des Wertebereichs (min=0, max=%ld).\n"
+msgid "Subsong number out of range (min=0, max=%d).\n"
+msgstr "Subsong-Nummer außerhalb des Wertebereichs (min=0, max=%d).\n"
+
+#, c-format
+msgid "Timing:           %2.2fHz timer%s\n"
+msgstr "Timing:           %2.2fHz timer%s\n"
+
+#, c-format
+msgid "Timing:           %s\n"
+msgstr "Timing:           %s\n"
 
 msgid "Title"
 msgstr "Titel"
@@ -220,6 +265,14 @@ msgstr "Titel"
 #, c-format
 msgid "Unknown option %s at %s line %ld.\n"
 msgstr "Unbekannte Option %s in %s Zeile %ld.\n"
+
+#, c-format
+msgid "Unsupported default bank @0x0000: %d\n"
+msgstr "Unsupported default bank @0x0000: %d\n"
+
+#, c-format
+msgid "Unsupported timerflag value: %d\n"
+msgstr "Unsupported timerflag value: %d\n"
 
 msgid "Untitled"
 msgstr "Unbenannt"
@@ -298,6 +351,9 @@ msgstr "fcntl(F_GETFL) fehlgeschlagen: %s\n"
 msgid "fcntl(F_SETFL, flags&~O_NONBLOCK) failed: %s\n"
 msgstr "fcntl(F_SETFL, flags&~O_NONBLOCK) fehlgeschlagen: %s\n"
 
+msgid "gbr / not available"
+msgstr "gbr / not available"
+
 #, c-format
 msgid "ioctl(fd, SNDCTL_DSP_SETFMT, %d) failed: %s\n"
 msgstr "ioctl(fd, SNDCTL_DSP_SETFMT, %d) fehlgeschlagen: %s\n"
@@ -355,3 +411,34 @@ msgstr "snd_pcm_writei fehlgeschlagen: %s\n"
 
 msgid "untitled"
 msgstr "Unbenannt"
+
+#~ msgid "CRC32:\t\t0x%08lx/0x%08lx (%s)\n"
+#~ msgstr "CRC32:\t\t0x%08lx/0x%08lx (%s)\n"
+
+#~ msgid ""
+#~ "GBSVersion:     %ld\n"
+#~ "Title:          \"%s\"\n"
+#~ "Author:         \"%s\"\n"
+#~ "Copyright:      \"%s\"\n"
+#~ "Load address:   0x%04x\n"
+#~ "Init address:   0x%04x\n"
+#~ "Play address:   0x%04x\n"
+#~ "Stack pointer:  0x%04x\n"
+#~ "File size:      0x%08x\n"
+#~ "ROM size:       0x%08lx (%ld banks)\n"
+#~ "Subsongs:       %ld\n"
+#~ msgstr ""
+#~ "GBSVersion:     %ld\n"
+#~ "Titel:          \"%s\"\n"
+#~ "Autor:          \"%s\"\n"
+#~ "Copyright:      \"%s\"\n"
+#~ "Ladeadresse:    0x%04x\n"
+#~ "Initadresse:    0x%04x\n"
+#~ "Abspieladresse: 0x%04x\n"
+#~ "Stack-Zeiger:   0x%04x\n"
+#~ "Dateigrösse:    0x%08x\n"
+#~ "ROM-Grösse:     0x%08lx (%ld Bänke)\n"
+#~ "Subsongs:       %ld\n"
+
+#~ msgid "Timing:           59.7Hz vblank\n"
+#~ msgstr "Timing:           59.7Hz vblank\n"

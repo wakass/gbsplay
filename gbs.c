@@ -1,8 +1,8 @@
 /*
  * gbsplay is a Gameboy sound player
  *
- * 2003-2006 (C) by Tobias Diedrich <ranma+gbsplay@tdiedrich.de>
- *                  Christian Garbs <mitch@cgarbs.de>
+ * 2003-2006,2013 (C) by Tobias Diedrich <ranma+gbsplay@tdiedrich.de>
+ *                       Christian Garbs <mitch@cgarbs.de>
  * Licensed under GNU GPL.
  */
 
@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "common.h"
 #include "gbhw.h"
@@ -23,87 +24,7 @@
 
 #define GBS_MAGIC		"GBS"
 #define GBS_EXTHDR_MAGIC	"GBSX"
-
-/* called with subsong in a, load address in hl */
-static const uint8_t playercode[] = {
-/* Part 1, hardware init */
-	0xf5,              /* 0050:  push af         */
-	0xe5,              /* 0051:  push hl         */
-	0x01, 0x30, 0x00,  /* 0052:  ld   bc, 0x0030 */
-	0x11, 0x10, 0xff,  /* 0055:  ld   de, 0xff10 */
-	0x21, 0x9f, 0x00,  /* 0058:  ld   hl, 0x009f */
-	                   /*   l1:                  */
-	0x2a,              /* 005b:  ldi  a, [hl]    */
-	0x12,              /* 005c:  ld   [de], a    */
-	0x13,              /* 005d:  inc  de         */
-	0x0b,              /* 005e:  dec  bc         */
-	0x78,              /* 005f:  ld   a, b       */
-	0xb1,              /* 0060:  or   a, c       */
-	0x20, 0xf8,        /* 0061:  jr nz l1 ; ($-8)*/
-	0xe1,              /* 0063:  pop  hl         */
-	0xe5,              /* 0064:  push hl         */
-	0x01, 0x0e, 0x00,  /* 0065:  ld   bc, 0x000e */
-	0x09,              /* 0068:  add  hl, bc     */
-	0x2a,              /* 0069:  ldi  a, [hl]    */
-	0xe0, 0x06,        /* 006a:  ldh  [0x06], a  */
-	0x2a,              /* 006c:  ldi  a, [hl]    */
-	0xe0, 0x07,        /* 006d:  ldh  [0x07], a  */
-	0x11, 0xff, 0xff,  /* 006f:  ld   de, 0xffff */
-	0xcb, 0x57,        /* 0072:  bit  2, a       */
-	0x3e, 0x01,        /* 0074:  ld   a, 0x01    */
-	0x28, 0x02,        /* 0076:  jr z l2 ; ($+2) */
-	0x3e, 0x04,        /* 0078:  ld   a, 0x04    */
-	                   /*   l2:                  */
-	0x12,              /* 007a:  ld   [de], a    */
-	0xe1,              /* 007b:  pop  hl         */
-	0xf1,              /* 007c:  pop  af         */
-/* Part 2, wrapper for replayer code */
-	0x57,              /* 007d:  ld   d, a       */
-	0xe5,              /* 007e:  push hl         */
-	0x01, 0x08, 0x00,  /* 007f:  ld   bc, 0x0008 */
-	0x09,              /* 0082:  add  hl, bc     */
-	0x2a,              /* 0083:  ldi  a, [hl]    */
-	0x66,              /* 0084:  ld   h, [hl]    */
-	0x6f,              /* 0085:  ld   l, a       */
-	0x7a,              /* 0086:  ld   a, d       */
-	0x01, 0x8c, 0x00,  /* 0087:  ld   bc, 0x008c */
-	0xc5,              /* 008a:  push bc         */
-	0xe9,              /* 008b:  jp   hl         */
-	                   /*   l3:                  */
-	0xfb,              /* 008c:  ei              */
-	0x76,              /* 008d:  halt            */
-	0xe1,              /* 008e:  pop  hl         */
-	0xe5,              /* 008f:  push hl         */
-	0x01, 0x0a, 0x00,  /* 0090:  ld   bc, 0x000a */
-	0x09,              /* 0093:  add  hl, bc     */
-	0x2a,              /* 0094:  ldi  a, [hl]    */
-	0x66,              /* 0095:  ld   h, [hl]    */
-	0x6f,              /* 0096:  ld   l, a       */
-	0x7a,              /* 0097:  ld   a, d       */
-	0x01, 0x9d, 0x00,  /* 0098:  ld   bc, 0x009d */
-	0xc5,              /* 009b:  push bc         */
-	0xe9,              /* 009c:  jp   hl         */
-	0x18, 0xed,        /* 009d:  jr l3 ; ($-19)  */
-
-/* 009f: initdata
- *
- * Initial state of sound hardware registers
- * and wave pattern memory
- */
-/* sound registers */
-	0x80, 0xbf, 0x00, 0x00, 0xbf,
-	0x00, 0x3f, 0x00, 0x00, 0xbf,
-	0x7f, 0xff, 0x9f, 0x00, 0xbf,
-	0x00, 0xff, 0x00, 0x00, 0xbf,
-	0x77, 0xf3, 0xf1, 0x00,
-	0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00,
-/* wave pattern memory, taken from gbsound.txt v0.99.19 (12/31/2002) */
-	0xac, 0xdd, 0xda, 0x48,
-	0x36, 0x02, 0xcf, 0x16,
-	0x2c, 0x04, 0xe5, 0x2c,
-	0xac, 0xdd, 0xda, 0x48
-};
+#define GBR_MAGIC		"GBRF"
 
 regparm long gbs_init(struct gbs *gbs, long subsong)
 {
@@ -111,17 +32,34 @@ regparm long gbs_init(struct gbs *gbs, long subsong)
 
 	if (subsong == -1) subsong = gbs->defaultsong - 1;
 	if (subsong >= gbs->songs) {
-		fprintf(stderr, _("Subsong number out of range (min=0, max=%ld).\n"), gbs->songs - 1);
+		fprintf(stderr, _("Subsong number out of range (min=0, max=%d).\n"), (int)gbs->songs - 1);
 		return 0;
 	}
 
-	gbs->subsong = subsong;
-	REGS16_W(gbcpu_regs, PC, 0x0050); /* playercode entry point */
+	if (gbs->defaultbank != 1) {
+		gbcpu_mem_put(0x2000, gbs->defaultbank);
+	}
+	gbhw_io_put(0xff06, gbs->tma);
+	gbhw_io_put(0xff07, gbs->tac);
+	gbhw_io_put(0xffff, 0x05);
+
 	REGS16_W(gbcpu_regs, SP, gbs->stack);
-	REGS16_W(gbcpu_regs, HL, gbs->load - 0x70);
+
+	/* put halt breakpoint PC on stack */
+	gbcpu_halt_at_pc = 0xffff;
+	REGS16_W(gbcpu_regs, PC, 0xff80);
+	REGS16_W(gbcpu_regs, HL, gbcpu_halt_at_pc);
+	gbcpu_mem_put(0xff80, 0xe5); /* push hl */
+	gbcpu_step();
+	/* clear regs/memory touched by stack etup */
+	REGS16_W(gbcpu_regs, HL, 0x0000);
+	gbcpu_mem_put(0xff80, 0x00);
+
+	REGS16_W(gbcpu_regs, PC, gbs->init);
 	gbcpu_regs.rn.a = subsong;
 
 	gbs->ticks = 0;
+	gbs->subsong = subsong;
 
 	return 1;
 }
@@ -190,17 +128,18 @@ regparm long gbs_step(struct gbs *gbs, long time_to_work)
 
 regparm void gbs_printinfo(struct gbs *gbs, long verbose)
 {
-	printf(_("GBSVersion:     %ld\n"
-	         "Title:          \"%s\"\n"
-	         "Author:         \"%s\"\n"
-	         "Copyright:      \"%s\"\n"
-	         "Load address:   0x%04x\n"
-	         "Init address:   0x%04x\n"
-	         "Play address:   0x%04x\n"
-	         "Stack pointer:  0x%04x\n"
-	         "File size:      0x%08x\n"
-	         "ROM size:       0x%08lx (%ld banks)\n"
-	         "Subsongs:       %ld\n"),
+	printf(_("GBSVersion:       %u\n"
+	         "Title:            \"%s\"\n"
+	         "Author:           \"%s\"\n"
+	         "Copyright:        \"%s\"\n"
+	         "Load address:     0x%04x\n"
+	         "Init address:     0x%04x\n"
+	         "Play address:     0x%04x\n"
+	         "Stack pointer:    0x%04x\n"
+	         "File size:        0x%08x\n"
+	         "ROM size:         0x%08lx (%ld banks)\n"
+	         "Subsongs:         %u\n"
+	         "Default subsong:  %u\n"),
 	       gbs->version,
 	       gbs->title,
 	       gbs->author,
@@ -212,11 +151,29 @@ regparm void gbs_printinfo(struct gbs *gbs, long verbose)
 	       (unsigned int)gbs->filesize,
 	       gbs->romsize,
 	       gbs->romsize/0x4000,
-	       gbs->songs);
+	       gbs->songs,
+	       gbs->defaultsong);
+	if (gbs->tac & 0x04) {
+		long timertc = (256-gbs->tma) * (16 << (((gbs->tac+3) & 3) << 1));
+		if (gbs->tac & 0x80)
+			timertc /= 2;
+		printf(_("Timing:           %2.2fHz timer%s\n"),
+		       GBHW_CLOCK / (float)timertc,
+		       (gbs->tac & 0x78) == 0x40 ? _(" + VBlank (ugetab)") : "");
+	} else {
+		printf(_("Timing:           %s\n"),
+		       _("59.7Hz VBlank\n"));
+	}
+	if (gbs->defaultbank != 1) {
+		printf(_("Bank @0x4000:     %d\n"), gbs->defaultbank);
+	}
 	if (gbs->version == 2) {
-		printf(_("CRC32:		0x%08lx/0x%08lx (%s)\n"),
+		printf(_("CRC32:            0x%08lx/0x%08lx (%s)\n"),
 		       (unsigned long)gbs->crc, (unsigned long)gbs->crcnow,
 		       gbs->crc == gbs->crcnow ? _("OK") : _("Failed"));
+	} else {
+		printf(_("CRC32:            0x%08lx\n"),
+		       (unsigned long)gbs->crcnow);
 	}
 	if (verbose && gbs->version == 2) {
 		long i;
@@ -237,10 +194,18 @@ regparm void gbs_printinfo(struct gbs *gbs, long verbose)
 	}
 }
 
+static regparm void gbs_free(struct gbs *gbs)
+{
+	if (gbs->buf)
+		free(gbs->buf);
+	if (gbs->subsong_info)
+		free(gbs->subsong_info);
+	free(gbs);
+}
+
 regparm void gbs_close(struct gbs *gbs)
 {
-	free(gbs->subsong_info);
-	free(gbs);
+	gbs_free(gbs);
 }
 
 static regparm void writeint(char *buf, uint32_t val, long bytes)
@@ -360,6 +325,110 @@ regparm long gbs_write(struct gbs *gbs, char *name, long version)
 	return 1;
 }
 
+static regparm struct gbs *gbr_open(char *name)
+{
+	long fd, i;
+	struct stat st;
+	struct gbs *gbs = malloc(sizeof(struct gbs));
+	char *buf;
+	char *na_str = _("gbr / not available");
+	uint16_t vsync_addr;
+	uint16_t timer_addr;
+
+	memset(gbs, 0, sizeof(struct gbs));
+	gbs->silence_timeout = 2;
+	gbs->subsong_timeout = 2*60;
+	gbs->gap = 2;
+	gbs->fadeout = 3;
+	if ((fd = open(name, O_RDONLY)) == -1) {
+		fprintf(stderr, _("Could not open %s: %s\n"), name, strerror(errno));
+		gbs_free(gbs);
+		return NULL;
+	}
+	fstat(fd, &st);
+	gbs->buf = buf = malloc(st.st_size);
+	if (read(fd, buf, st.st_size) != st.st_size) {
+		fprintf(stderr, _("Could not read %s: %s\n"), name, strerror(errno));
+		gbs_free(gbs);
+		return NULL;
+	}
+	if (strncmp(buf, GBR_MAGIC, 4) != 0) {
+		fprintf(stderr, _("Not a GBR-File: %s\n"), name);
+		gbs_free(gbs);
+		return NULL;
+	}
+	if (buf[0x05] != 0) {
+		fprintf(stderr, _("Unsupported default bank @0x0000: %d\n"), buf[0x05]);
+		gbs_free(gbs);
+		return NULL;
+	}
+	if (buf[0x07] < 1 || buf[0x07] > 3) {
+		fprintf(stderr, _("Unsupported timerflag value: %d\n"), buf[0x07]);
+		gbs_free(gbs);
+		return NULL;
+	}
+	gbs->version = 0;
+	gbs->songs = 255;
+	gbs->defaultsong = 1;
+	gbs->defaultbank = buf[0x06];
+	gbs->load  = 0;
+	gbs->init  = readint(&buf[0x08], 2);
+	vsync_addr = readint(&buf[0x0a], 2);
+	timer_addr = readint(&buf[0x0c], 2);
+
+	if (buf[0x07] == 1) {
+		gbs->play = vsync_addr;
+	} else {
+		gbs->play = timer_addr;
+	}
+	gbs->tma = buf[0x0e];
+	gbs->tac = buf[0x0f];
+	gbs->stack = 0xfffe;
+
+	/* Test if this looks like a valid rom header title */
+	for (i=0x0154; i<0x0163; i++) {
+		if (!(isalnum(buf[i]) || isspace(buf[i])))
+			break;
+	}
+	if (buf[i] == 0) {
+		/* Title looks valid and is zero-terminated. */
+		gbs->title = &buf[0x0154];
+	} else {
+		gbs->title = na_str;
+	}
+	gbs->author = na_str;
+	gbs->copyright = na_str;
+	gbs->code = &buf[0x20];
+	gbs->filesize = st.st_size;
+
+	gbs->subsong_info = malloc(gbs->songs * sizeof(struct gbs_subsong_info));
+	memset(gbs->subsong_info, 0, gbs->songs * sizeof(struct gbs_subsong_info));
+	gbs->codelen = st.st_size - 0x20;
+	gbs->crcnow = gbs_crc32(0, buf, gbs->filesize);
+	gbs->romsize = (gbs->codelen + 0x3fff) & ~0x3fff;
+
+	gbs->rom = calloc(1, gbs->romsize);
+	memcpy(gbs->rom, &buf[0x20], gbs->codelen);
+
+	gbs->rom[0x40] = 0xc9; /* reti */
+	gbs->rom[0x50] = 0xc9; /* reti */
+	if (buf[0x07] & 1) {
+		/* V-Blank */
+		gbs->rom[0x40] = 0xc3; /* jp imm16 */
+		gbs->rom[0x41] = vsync_addr & 0xff;
+		gbs->rom[0x42] = vsync_addr >> 8;
+	}
+	if (buf[0x07] & 2) {
+		/* Timer */
+		gbs->rom[0x50] = 0xc3; /* jp imm16 */
+		gbs->rom[0x51] = timer_addr & 0xff;
+		gbs->rom[0x52] = timer_addr >> 8;
+	}
+	close(fd);
+
+	return gbs;
+}
+
 regparm struct gbs *gbs_open(char *name)
 {
 	long fd, i;
@@ -374,34 +443,55 @@ regparm struct gbs *gbs_open(char *name)
 	gbs->subsong_timeout = 2*60;
 	gbs->gap = 2;
 	gbs->fadeout = 3;
+	gbs->defaultbank = 1;
 	if ((fd = open(name, O_RDONLY)) == -1) {
 		fprintf(stderr, _("Could not open %s: %s\n"), name, strerror(errno));
+		gbs_free(gbs);
 		return NULL;
 	}
 	fstat(fd, &st);
 	gbs->buf = buf = malloc(st.st_size);
 	if (read(fd, buf, st.st_size) != st.st_size) {
 		fprintf(stderr, _("Could not read %s: %s\n"), name, strerror(errno));
+		gbs_free(gbs);
 		return NULL;
+	}
+	if (strncmp(buf, GBR_MAGIC, 4) == 0) {
+		gbs_free(gbs);
+		return gbr_open(name);
 	}
 	if (strncmp(buf, GBS_MAGIC, 3) != 0) {
 		fprintf(stderr, _("Not a GBS-File: %s\n"), name);
+		gbs_free(gbs);
 		return NULL;
 	}
-	gbs->version = buf[3];
+	gbs->version = buf[0x03];
 	if (gbs->version != 1) {
-		fprintf(stderr, _("GBS Version %d unsupported.\n"), buf[3]);
+		fprintf(stderr, _("GBS Version %d unsupported.\n"), gbs->version);
+		gbs_free(gbs);
 		return NULL;
 	}
 
 	gbs->songs = buf[0x04];
+	if (gbs->songs < 1) {
+		fprintf(stderr, _("Number of subsongs = %d is unreasonable.\n"), gbs->songs);
+		gbs_free(gbs);
+		return NULL;
+	}
+
 	gbs->defaultsong = buf[0x05];
+	if (gbs->defaultsong < 1 || gbs->defaultsong > gbs->songs) {
+		fprintf(stderr, _("Default subsong %d is out of range [1..%d].\n"), gbs->defaultsong, gbs->songs);
+		gbs_free(gbs);
+		return NULL;
+	}
+
 	gbs->load  = readint(&buf[0x06], 2);
 	gbs->init  = readint(&buf[0x08], 2);
 	gbs->play  = readint(&buf[0x0a], 2);
 	gbs->stack = readint(&buf[0x0c], 2);
-	gbs->tma = buf[0x0e]; /* Will be programmed by playercode */
-	gbs->tmc = buf[0x0f]; /* Will be programmed by playercode */
+	gbs->tma = buf[0x0e];
+	gbs->tac = buf[0x0f];
 
 	memcpy(gbs->v1strings, &buf[0x10], 32);
 	memcpy(gbs->v1strings+33, &buf[0x30], 32);
@@ -479,7 +569,6 @@ regparm struct gbs *gbs_open(char *name)
 
 	gbs->rom = calloc(1, gbs->romsize);
 	memcpy(&gbs->rom[gbs->load - 0x70], buf, 0x70 + gbs->codelen);
-	memcpy(&gbs->rom[0x50], playercode, sizeof(playercode));
 
 	for (i=0; i<8; i++) {
 		long addr = gbs->load + 8*i; /* jump address */
@@ -487,8 +576,33 @@ regparm struct gbs *gbs_open(char *name)
 		gbs->rom[8*i+1] = addr & 0xff;
 		gbs->rom[8*i+2] = addr >> 8;
 	}
-	gbs->rom[0x40] = 0xc9; /* reti */
-	gbs->rom[0x48] = 0xc9; /* reti */
+	if ((gbs->tac & 0x78) == 0x40) { /* ugetab int vector extension */
+		/* V-Blank */
+		gbs->rom[0x40] = 0xc3; /* jp imm16 */
+		gbs->rom[0x41] = (gbs->load + 0x40) & 0xff;
+		gbs->rom[0x42] = (gbs->load + 0x40) >> 8;
+		/* Timer */
+		gbs->rom[0x50] = 0xc3; /* jp imm16 */
+		gbs->rom[0x51] = (gbs->load + 0x48) & 0xff;
+		gbs->rom[0x52] = (gbs->load + 0x48) >> 8;
+	} else if (gbs->tac & 0x04) { /* timer enabled */
+		/* V-Blank */
+		gbs->rom[0x40] = 0xc9; /* reti */
+		/* Timer */
+		gbs->rom[0x50] = 0xc3; /* jp imm16 */
+		gbs->rom[0x51] = gbs->play & 0xff;
+		gbs->rom[0x52] = gbs->play >> 8;
+	} else {
+		/* V-Blank */
+		gbs->rom[0x40] = 0xc3; /* jp imm16 */
+		gbs->rom[0x41] = gbs->play & 0xff;
+		gbs->rom[0x42] = gbs->play >> 8;
+		/* Timer */
+		gbs->rom[0x50] = 0xc9; /* reti */
+	}
+	gbs->rom[0x48] = 0xc9; /* reti (LCD Stat) */
+	gbs->rom[0x58] = 0xc9; /* reti (Serial) */
+	gbs->rom[0x60] = 0xc9; /* reti (Joypad) */
 
 	close(fd);
 

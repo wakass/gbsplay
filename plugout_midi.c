@@ -238,6 +238,9 @@ static int regparm midi_io(long cycles, uint32_t addr, uint8_t val)
 
 	long chan = (addr - 0xff10) / 5;
 
+	if (!file)
+		return 1;
+
 	switch (addr) {
 	case 0xff12:
 	case 0xff17:
@@ -297,11 +300,6 @@ static int regparm midi_io(long cycles, uint32_t addr, uint8_t val)
 	return 0;
 }
 
-static ssize_t regparm midi_write(const void *buf, size_t count)
-{
-	return count;
-}
-
 static void regparm midi_close(void)
 {
 	if (file)
@@ -314,6 +312,5 @@ const struct output_plugin plugout_midi = {
 	.open = midi_open,
 	.skip = midi_skip,
 	.io = midi_io,
-	.write = midi_write,
 	.close = midi_close,
 };

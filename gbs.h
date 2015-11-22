@@ -1,7 +1,8 @@
 /*
  * gbsplay is a Gameboy sound player
  *
- * 2003-2005 (C) by Tobias Diedrich <ranma+gbsplay@tdiedrich.de>
+ * 2003-2005,2013 (C) by Tobias Diedrich <ranma+gbsplay@tdiedrich.de>
+ *                       Christian Garbs <mitch@cgarbs.de>
  * Licensed under GNU GPL.
  */
 
@@ -25,15 +26,16 @@ struct gbs_subsong_info {
 
 struct gbs {
 	char *buf;
-	long version;
-	long songs;
-	long defaultsong;
+	uint8_t version;
+	uint8_t songs;
+	uint8_t defaultsong;
+	uint8_t defaultbank;
 	uint16_t load;
 	uint16_t init;
 	uint16_t play;
 	uint16_t stack;
 	uint8_t tma;
-	uint8_t tmc;
+	uint8_t tac;
 	char *title;
 	char *author;
 	char *copyright;
@@ -53,7 +55,7 @@ struct gbs {
 	int16_t lmin, lmax, lvol, rmin, rmax, rvol;
 	long subsong_timeout, silence_timeout, fadeout, gap;
 	long long silence_start;
-	long subsong;
+	int subsong;
 	gbs_nextsubsong_cb nextsubsong_cb;
 	void *nextsubsong_cb_priv;
 };

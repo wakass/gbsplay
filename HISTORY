@@ -2,9 +2,60 @@
 gbsplay HISTORY
 
 
-2008/xx/xx  -  0.0.91cvs
+2015/08/23  -  0.0.93
 ~~~~~~~~~~~~~~~~~~~~~
 
+Bugfixes:
+
+- build process:
+  - configure now fails when a requested feature is not available
+  - run checksum test only on x86 architectures
+
+Removals:
+
+- ditz bug tracker issues removed, use the issue tracker on the github
+  project page instead: https://github.com/mmitch/gbsplay/issues
+
+Enhancements:
+
+- build process:
+  - configure now fails when a requested feature is not available
+  - run checksum test only on x86 architectures
+  - add dsound plugin to configure --help
+  - enable regparm on x86_64
+  - include all the files in tarball
+
+
+2015/06/19  -  0.0.92
+~~~~~~~~~~~~~~~~~~~~~
+
+Bugfixes:
+
+- fix player jump bug in Wizardry Gaiden
+- fix switched byte order in plugout_midi
+  (caused huge delays between notes)
+- fix crash on files with too many subsongs
+
+Enhancements:
+
+- gbsplay
+  - add PulseAudio plugout
+  - add DirectSound plugout
+  - plugout_midi: output voices to different channels
+  - plugout_also: support suspend/resume
+
+- gbsinfo:
+  - also display default subsong
+
+- contrib:
+  - better bash completion rules
+
+- build process:
+  - fix build with GCC 5
+  - add cross-compiling support
+  - handle CFLAGS/LDFLAGS for autotools compatibility
+  - don't fail test target when a key is pressed
+  - simpler/better/more unit tests
 
 
 2008/08/15  -  0.0.91

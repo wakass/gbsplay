@@ -15,7 +15,10 @@
 
 #include "gbcpu.h"
 #include "gbhw.h"
-#include "impulsegen.h"
+#include "impulse.h"
+
+#define REG_IF 0x0f
+#define REG_IE 0x7f /* Nominally 0xff, but we remap it to 0x7f internally. */
 
 static uint8_t *rom;
 static uint8_t intram[0x2000];
@@ -24,6 +27,27 @@ static uint8_t ioregs[0x80];
 static uint8_t hiram[0x80];
 static long rombank = 1;
 static long lastbank;
+static long apu_on = 1;
+
+static const uint8_t ioregs_ormask[sizeof(ioregs)] = {
+	/* 0x00 */ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	/* 0x10 */ 0x80, 0x3f, 0x00, 0xff, 0xbf,
+	/* 0x15 */ 0xff, 0x3f, 0x00, 0xff, 0xbf,
+	/* 0x1a */ 0x7f, 0xff, 0x9f, 0xff, 0xbf,
+	/* 0x1f */ 0xff, 0xff, 0x00, 0x00, 0xbf,
+	/* 0x24 */ 0x00, 0x00, 0x70, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+};
+static const uint8_t ioregs_initdata[sizeof(ioregs)] = {
+	/* 0x00 */ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+/* sound registers */
+	/* 0x10 */ 0x80, 0xbf, 0x00, 0x00, 0xbf,
+	/* 0x15 */ 0x00, 0x3f, 0x00, 0x00, 0xbf,
+	/* 0x1a */ 0x7f, 0xff, 0x9f, 0x00, 0xbf,
+	/* 0x1f */ 0x00, 0xff, 0x00, 0x00, 0xbf,
+	/* 0x24 */ 0x77, 0xf3, 0xf1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+/* wave pattern memory, taken from gbsound.txt v0.99.19 (12/31/2002) */
+	/* 0x30 */ 0xac, 0xdd, 0xda, 0x48, 0x36, 0x02, 0xcf, 0x16, 0x2c, 0x04, 0xe5, 0x2c, 0xac, 0xdd, 0xda, 0x48,
+};
 
 static const char dutylookup[4] = {
 	1, 2, 4, 6
@@ -77,14 +101,8 @@ static long sweep_div;
 
 static long ch3pos;
 
-static long impulse_n_shift = 7;
-static long impulse_w_shift = 5;
-static double impulse_cutoff = 1.0;
-
-static short *base_impulse = NULL;
-
-#define IMPULSE_WIDTH (1 << impulse_w_shift)
-#define IMPULSE_N (1 << impulse_n_shift)
+#define IMPULSE_WIDTH (1 << IMPULSE_W_SHIFT)
+#define IMPULSE_N (1 << IMPULSE_N_SHIFT)
 #define IMPULSE_N_MASK (IMPULSE_N - 1)
 
 static regparm uint32_t rom_get(uint32_t addr)
@@ -106,11 +124,16 @@ static regparm uint32_t io_get(uint32_t addr)
 	}
 	if (addr >= 0xff10 &&
 	           addr <= 0xff3f) {
-		return ioregs[addr & 0x7f];
+		return ioregs[addr & 0x7f] | ioregs_ormask[addr & 0x7f];
 	}
 	if (addr == 0xff00) return 0;
+	if (addr == 0xff70) {
+		/* GBC ram bank switch */
+		WARN_ONCE("ioread from SVBK (CGB mode) ignored.\n");
+		return 0xff;
+	}
 	if (addr == 0xffff) return ioregs[0x7f];
-	fprintf(stderr, "ioread from 0x%04x unimplemented.\n", (unsigned int)addr);
+	WARN_ONCE("ioread from 0x%04x unimplemented.\n", (unsigned int)addr);
 	DPRINTF("io_get(%04x)\n", addr);
 	return 0xff;
 }
@@ -133,19 +156,25 @@ static regparm void rom_put(uint32_t addr, uint8_t val)
 		val &= 0x1f;
 		rombank = val + (val == 0);
 		if (rombank > lastbank) {
-			fprintf(stderr, "Bank %ld out of range (0-%ld)!\n", rombank, lastbank);
+			WARN_ONCE("Bank %ld out of range (0-%ld)!\n", rombank, lastbank);
 			rombank = lastbank;
 		}
+	} else {
+		WARN_ONCE("rom write of %02x to %04x ignored\n", val, addr);
 	}
 }
 
 static regparm void io_put(uint32_t addr, uint8_t val)
 {
 	long chn = (addr - 0xff10)/5;
-	iocallback(sum_cycles, addr, val, iocallback_priv);
+	if (iocallback)
+		iocallback(sum_cycles, addr, val, iocallback_priv);
 
 	if (addr >= 0xff80 && addr <= 0xfffe) {
 		hiram[addr & 0x7f] = val;
+		return;
+	}
+	if (apu_on == 0 && addr >= 0xff10 && addr < 0xff26) {
 		return;
 	}
 	ioregs[addr & 0x7f] = val;
@@ -229,22 +258,24 @@ static regparm void io_put(uint32_t addr, uint8_t val)
 		case 0xff22:
 		case 0xff23:
 			{
-				long div = ioregs[0x22];
-				long shift = div >> 4;
-				long rate = div & 7;
+				long reg = ioregs[0x22];
+				long shift = reg >> 4;
+				long rate = reg & 7;
 				gbhw_ch[3].div_ctr = 0;
-				gbhw_ch[3].div_tc = 1 << shift;
-				if (div & 8) {
+				gbhw_ch[3].div_tc = 16 << shift;
+				if (reg & 8) {
 					tap1 = TAP1_7;
 					tap2 = TAP2_7;
 				} else {
 					tap1 = TAP1_15;
 					tap2 = TAP2_15;
 				}
-				lfsr |= 1; /* Make sure lfsr is not 0 */
 				if (rate) gbhw_ch[3].div_tc *= rate;
 				else gbhw_ch[3].div_tc /= 2;
 				if (addr == 0xff22) break;
+				if (val & 0x80) {  /* trigger */
+					lfsr = 0xffffffff;
+				}
 //				printf(" ch4: vol=%02d envd=%ld envspd=%ld duty_ctr=%ld len=%03d len_en=%ld key=%04d gate=%ld%ld\n", gbhw_ch[3].volume, gbhw_ch[3].env_dir, gbhw_ch[3].env_ctr, gbhw_ch[3].duty_ctr, gbhw_ch[3].len, gbhw_ch[3].len_enable, gbhw_ch[3].div_tc, gbhw_ch[3].leftgate, gbhw_ch[3].rightgate);
 			}
 			gbhw_ch[chn].len_enable = (ioregs[0x23] & 0x40) > 0;
@@ -260,7 +291,19 @@ static regparm void io_put(uint32_t addr, uint8_t val)
 			gbhw_ch[3].rightgate = (val & 0x08) > 0;
 			break;
 		case 0xff26:
-			ioregs[0x26] = 0x80;
+			if (val & 0x80) {
+				ioregs[0x26] = 0x80;
+				apu_on = 1;
+			} else {
+				long i;
+				for (i = 0xff10; i < 0xff26; i++) {
+					io_put(i, 0);
+				}
+				apu_on = 0;
+			}
+			break;
+		case 0xff70:
+			WARN_ONCE("iowrite to SVBK (CGB mode) ignored.\n");
 			break;
 		case 0xff00:
 		case 0xff24:
@@ -289,10 +332,11 @@ static regparm void io_put(uint32_t addr, uint8_t val)
 		case 0xff3d:
 		case 0xff3e:
 		case 0xff3f:
+		case 0xff50: /* bootrom lockout reg */
 		case 0xffff:
 			break;
 		default:
-			fprintf(stderr, "iowrite to 0x%04x unimplemented (val=%02x).\n", addr, val);
+			WARN_ONCE("iowrite to 0x%04x unimplemented (val=%02x).\n", addr, val);
 			break;
 	}
 }
@@ -381,6 +425,9 @@ static regparm void gb_flush_buffer(void)
 	long overlap;
 	long l_smpl, r_smpl;
 
+	if (!callback)
+		return;
+
 	assert(soundbuf != NULL);
 	assert(impbuf != NULL);
 
@@ -421,11 +468,14 @@ static regparm void gb_change_level(long l_ofs, long r_ofs)
 	long imp_l = -IMPULSE_WIDTH/2;
 	long imp_r = IMPULSE_WIDTH/2;
 	long i;
-	short *ptr = base_impulse;
+	const short *ptr = base_impulse;
+
+	if (!callback)
+		return;
 
 	assert(impbuf != NULL);
 	pos = (long)(impbuf->cycles * SOUND_DIV_MULT / sound_div_tc);
-	imp_idx = (long)((impbuf->cycles << impulse_n_shift)*SOUND_DIV_MULT / sound_div_tc) & IMPULSE_N_MASK;
+	imp_idx = (long)((impbuf->cycles << IMPULSE_N_SHIFT)*SOUND_DIV_MULT / sound_div_tc) & IMPULSE_N_MASK;
 	assert(pos + imp_r < impbuf->samples);
 	assert(pos + imp_l >= 0);
 
@@ -447,6 +497,7 @@ static regparm void gb_sound(long cycles)
 	long i, j;
 	long l_lvl = 0, r_lvl = 0;
 	static long old_l = 0, old_r = 0;
+	static long next_nibble = 0;
 
 	assert(impbuf != NULL);
 
@@ -459,24 +510,46 @@ static regparm void gb_sound(long cycles)
 		if (gbhw_ch[2].master) {
 			gbhw_ch[2].div_ctr--;
 			if (gbhw_ch[2].div_ctr <= 0) {
-				long pos = ch3pos++;
-				long val = GET_NIBBLE(&ioregs[0x30], pos);
+				long val = next_nibble;
 				long old_l = gbhw_ch[2].l_lvl;
 				long old_r = gbhw_ch[2].r_lvl;
 				long l_diff, r_diff;
+				long pos = ch3pos++;
+				next_nibble = GET_NIBBLE(&ioregs[0x30], pos) * 2;
 				gbhw_ch[2].div_ctr = gbhw_ch[2].div_tc*2;
 				if (gbhw_ch[2].volume) {
 					val = val >> (gbhw_ch[2].volume-1);
 				} else val = 0;
-				val = val*2;
 				if (gbhw_ch[2].volume && !gbhw_ch[2].mute) {
 					if (gbhw_ch[2].leftgate)
-						gbhw_ch[2].l_lvl = val;
+						gbhw_ch[2].l_lvl = val - 15;
 					if (gbhw_ch[2].rightgate)
-						gbhw_ch[2].r_lvl = val;
+						gbhw_ch[2].r_lvl = val - 15;
 				}
 				l_diff = gbhw_ch[2].l_lvl - old_l;
 				r_diff = gbhw_ch[2].r_lvl - old_r;
+				gb_change_level(l_diff, r_diff);
+			}
+		}
+
+		if (gbhw_ch[3].master) {
+			static long val;
+			gbhw_ch[3].div_ctr--;
+			if (gbhw_ch[3].div_ctr <= 0) {
+				long old_l = gbhw_ch[3].l_lvl;
+				long old_r = gbhw_ch[3].r_lvl;
+				long l_diff, r_diff;
+				gbhw_ch[3].div_ctr = gbhw_ch[3].div_tc;
+				lfsr = (lfsr << 1) | (((lfsr & tap1) > 0) ^ ((lfsr & tap2) > 0));
+				val = gbhw_ch[3].volume * 2 * (!(lfsr & tap1));
+				if (!gbhw_ch[3].mute) {
+					if (gbhw_ch[3].leftgate)
+						gbhw_ch[3].l_lvl = val - 15;
+					if (gbhw_ch[3].rightgate)
+						gbhw_ch[3].r_lvl = val - 15;
+				}
+				l_diff = gbhw_ch[3].l_lvl - old_l;
+				r_diff = gbhw_ch[3].r_lvl - old_r;
 				gb_change_level(l_diff, r_diff);
 			}
 		}
@@ -485,15 +558,15 @@ static regparm void gb_sound(long cycles)
 			main_div -= main_div_tc;
 
 			for (i=0; i<2; i++) if (gbhw_ch[i].master) {
-				long val = gbhw_ch[i].volume;
+				long val = 2 * gbhw_ch[i].volume;
 				if (gbhw_ch[i].div_ctr > gbhw_ch[i].duty_tc) {
-					val = -val;
+					val = 0;
 				}
 				if (!gbhw_ch[i].mute) {
 					if (gbhw_ch[i].leftgate)
-						gbhw_ch[i].l_lvl = val;
+						gbhw_ch[i].l_lvl = val - 15;
 					if (gbhw_ch[i].rightgate)
-						gbhw_ch[i].r_lvl = val;
+						gbhw_ch[i].r_lvl = val - 15;
 				}
 				gbhw_ch[i].div_ctr--;
 				if (gbhw_ch[i].div_ctr <= 0) {
@@ -504,26 +577,6 @@ static regparm void gb_sound(long cycles)
 				l_lvl += gbhw_ch[i].l_lvl;
 				r_lvl += gbhw_ch[i].r_lvl;
 			}
-
-			if (gbhw_ch[3].master) {
-//				long val = gbhw_ch[3].volume * (((lfsr >> 13) & 2)-1);
-//				long val = gbhw_ch[3].volume * ((random() & 2)-1);
-				static long val;
-				if (!gbhw_ch[3].mute) {
-					if (gbhw_ch[3].leftgate)
-						gbhw_ch[3].l_lvl = val;
-					if (gbhw_ch[3].rightgate)
-						gbhw_ch[3].r_lvl = val;
-				}
-				gbhw_ch[3].div_ctr--;
-				if (gbhw_ch[3].div_ctr <= 0) {
-					gbhw_ch[3].div_ctr = gbhw_ch[3].div_tc;
-					lfsr = (lfsr << 1) | (((lfsr & tap1) > 0) ^ ((lfsr & tap2) > 0));
-					val = gbhw_ch[3].volume * ((lfsr & 2)-1);
-				}
-			}
-			l_lvl += gbhw_ch[3].l_lvl;
-			r_lvl += gbhw_ch[3].r_lvl;
 
 			if (l_lvl != old_l || r_lvl != old_r) {
 				gb_change_level(l_lvl - old_l, r_lvl - old_r);
@@ -632,6 +685,9 @@ regparm void gbhw_init(uint8_t *rombuf, uint32_t size)
 	memset(intram, 0, sizeof(intram));
 	memset(hiram, 0, sizeof(hiram));
 	memset(ioregs, 0, sizeof(ioregs));
+	for (i=0x10; i<0x40; i++) {
+		io_put(0xff00 + i, ioregs_initdata[i]);
+	}
 
 	sum_cycles = 0;
 
@@ -641,10 +697,42 @@ regparm void gbhw_init(uint8_t *rombuf, uint32_t size)
 	gbcpu_addmem(0xa0, 0xbf, extram_put, extram_get);
 	gbcpu_addmem(0xc0, 0xfe, intram_put, intram_get);
 	gbcpu_addmem(0xff, 0xff, io_put, io_get);
+}
 
-	if (base_impulse)
-		free(base_impulse);
-	base_impulse = gen_impulsetab(impulse_w_shift, impulse_n_shift, impulse_cutoff);
+/* internal for gbs.c, not exported from libgbs */
+regparm void gbhw_io_put(uint16_t addr, uint8_t val) {
+	if (addr != 0xffff && (addr < 0xff00 || addr > 0xff7f))
+		return;
+	io_put(addr, val);
+}
+
+/* unmasked peek used by gbsplay.c to print regs */
+regparm uint8_t gbhw_io_peek(uint16_t addr)
+{
+	if (addr >= 0xff10 && addr <= 0xff3e) {
+		return ioregs[addr & 0x7f];
+	}
+	return 0xff;
+}
+
+
+regparm void gbhw_check_if(void)
+{
+	uint8_t mask = 0x01; /* lowest bit is highest priority irq */
+	uint8_t vec = 0x40;
+	if (!gbcpu_if) {
+		/* interrupts disabled */
+		return;
+	}
+	while (mask <= 0x10) {
+		if (ioregs[REG_IF] & ioregs[REG_IE] & mask) {
+			ioregs[REG_IF] &= ~mask;
+			gbcpu_intr(vec);
+			break;
+		}
+		vec += 0x08;
+		mask <<= 1;
+	}
 }
 
 /**
@@ -670,7 +758,9 @@ regparm long gbhw_step(long time_to_work)
 		if (timerctr > 0 && timerctr < maxcycles) maxcycles = timerctr;
 
 		while (cycles < maxcycles) {
-			long step = gbcpu_step();
+			long step;
+			gbhw_check_if();
+			step = gbcpu_step();
 			if (step < 0) return step;
 			cycles += step;
 			sum_cycles += step;
@@ -678,14 +768,14 @@ regparm long gbhw_step(long time_to_work)
 		}
 
 		if (vblankctr > 0) vblankctr -= cycles;
-		if (vblankctr <= 0 && gbcpu_if && (ioregs[0x7f] & 1)) {
+		if (vblankctr <= 0) {
 			vblankctr += vblanktc;
-			gbcpu_intr(0x40);
+			ioregs[REG_IF] |= 0x01;
 		}
 		if (timerctr > 0) timerctr -= cycles;
-		if (timerctr <= 0 && gbcpu_if && (ioregs[0x7f] & 4)) {
+		if (timerctr <= 0 && (ioregs[0x07] & 4)) {
 			timerctr += timertc;
-			gbcpu_intr(0x48);
+			ioregs[REG_IF] |= 0x04;
 		}
 		cycles_total += cycles;
 	}
