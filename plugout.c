@@ -26,6 +26,9 @@ extern const struct output_plugin plugout_dsound;
 #ifdef PLUGOUT_IODUMPER
 extern const struct output_plugin plugout_iodumper;
 #endif
+#ifdef PLUGOUT_IORAWDUMPER
+extern const struct output_plugin plugout_iorawdumper;
+#endif
 #ifdef PLUGOUT_MIDI
 extern const struct output_plugin plugout_midi;
 #endif
@@ -72,6 +75,9 @@ static output_plugin_const_t plugouts[] = {
 #endif
 #ifdef PLUGOUT_IODUMPER
 	&plugout_iodumper,
+#endif
+#ifdef PLUGOUT_IORAWDUMPER
+	&plugout_iorawdumper,
 #endif
 	NULL
 };
