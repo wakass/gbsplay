@@ -132,6 +132,9 @@ endif
 ifeq ($(plugout_iodumper),yes)
 objs_gbsplay += plugout_iodumper.o
 endif
+ifeq ($(plugout_iorawdumper),yes)
+objs_gbsplay += plugout_iorawdumper.o
+endif
 
 # install contrib files?
 ifeq ($(build_contrib),yes)

@@ -563,6 +563,7 @@ OPTS="${OPTS} use_dsound"
 OPTS="${OPTS} use_hardening"
 OPTS="${OPTS} use_i18n"
 OPTS="${OPTS} use_iodumper"
+OPTS="${OPTS} use_iorawdumper"
 OPTS="${OPTS} use_midi"
 OPTS="${OPTS} use_altmidi"
 OPTS="${OPTS} use_nas"
@@ -953,6 +954,8 @@ setdefault use_midi yes
 setdefault use_altmidi yes
 setdefault use_stdout yes
 setdefault use_iodumper yes
+setdefault use_iorawdumper yes
+
 
 printoptional modules build
 printoptional features use
@@ -1012,6 +1015,7 @@ __EOF__
     echo plugout_devdsp := $use_devdsp
     echo plugout_dsound := $use_dsound
     echo plugout_iodumper := $use_iodumper
+    echo plugout_iorawdumper := $use_iorawdumper
     echo plugout_midi := $use_midi
     echo plugout_altmidi := $use_altmidi
     echo plugout_nas := $use_nas
@@ -1029,6 +1033,7 @@ __EOF__
     plugout_x DEVDSP
     plugout_x DSOUND
     plugout_x IODUMPER
+    plugout_x IORAWDUMPER
     plugout_x MIDI
     plugout_x ALTMIDI
     plugout_x NAS
